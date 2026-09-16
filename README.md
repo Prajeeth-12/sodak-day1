@@ -167,12 +167,10 @@ Save the file.
 
 ### Two things to know about the free tier
 
-**Rate limits, not spend limits.** Gemini 2.5 Flash allows roughly **15 requests
-per minute**; Flash-Lite allows about **30**. Both have a daily cap in the
-low thousands of requests. One agent run can make five calls, so a whole class
-running the same lab at the same moment will occasionally hit a limit. The code
-handles this — it retries with backoff and prints `[rate limited - waiting 4s]`.
-That message is normal, not an error.
+**Rate limits, not spend limits.** On the free tier, Gemini models allow roughly
+**15–30 requests per minute** with daily quotas per model. One agent run can make several
+calls, so runs may occasionally hit a rate limit. The code handles this — it retries with
+backoff and prints `[rate limited - waiting 5s]`. That message is normal, not an error.
 
 **Your prompts may be used to improve Google's models.** That is the trade for a
 free tier. The sample data in this project is invented, so nothing sensitive is
@@ -215,8 +213,8 @@ SoDak EduTech - Agentic AI Day 1 - environment check
   [ok] .env file exists
   [ok] provider: Google Gemini (free tier)
   [ok] key loaded (AIzaSy...4f2a)
-         Google Gemini (free tier) | main=gemini-2.5-flash |
-         cheap=gemini-2.5-flash-lite | FREE tier
+         Google Gemini (free tier) | main=gemini-3.5-flash-lite |
+         cheap=gemini-3.1-flash-lite | FREE tier
 
   making one live API call (free)...
   [ok] model responded: 'SETUP OK'
@@ -442,11 +440,12 @@ Read the modules in this order — each is heavily commented and roughly 150 lin
 | `running scripts is disabled` | PowerShell execution policy | `Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned` |
 | `externally-managed-environment` | Installing outside a venv on Linux | Create and activate `.venv` first — do not use `--break-system-packages` |
 | `401` / `API key not valid` | Key wrong, or has a stray space | Regenerate at aistudio.google.com/apikey; check for quotes around it |
-| `[rate limited - waiting 4s]` | Free-tier requests-per-minute cap | **Normal.** It retries automatically. Wait. |
-| `429` after all retries | Whole class calling at once | Wait 60s. Or set `MODEL_MAIN=gemini-2.5-flash-lite` in `.env` (higher limit) |
+| `[rate limited - waiting 5s]` | Free-tier requests-per-minute cap | **Normal.** It retries automatically with exponential backoff. |
+| `429` after all retries | Per-minute burst limit reached | Wait 60s, or increase `MAX_RETRIES` and `RETRY_BASE_DELAY` in `.env` |
 | `APIConnectionError` | No internet, or a proxy is blocking | Check connectivity; ask the lab admin for proxy settings |
-| `404` / model not found | Model renamed or retired | Set `MODEL_MAIN=` in `.env` to a current model name |
+| `404` / model not found | Model renamed or retired | Set `MODEL_MAIN=` in `.env` to a current active model name |
 | `Connection refused` on Ollama | Ollama not running | Start the Ollama app, then `ollama pull llama3.1` |
+| `UnicodeEncodeError: 'charmap'` | Windows console default encoding | Configured in `_path.py` via `sys.stdout.reconfigure(encoding='utf-8')` |
 | `tool message must follow tool_calls` | Append order wrong | The assistant message goes in **before** any tool messages |
 | `not JSON serializable` | Tool returned a date or custom object | `json.dumps(..., default=str)` — see `memory.cap_tool_output` |
 | Run never ends | No iteration cap, or a tool always failing | Check `max_iterations`; look at the trace for a repeating tool |
