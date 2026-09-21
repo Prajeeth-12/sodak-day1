@@ -1,490 +1,155 @@
-# Agentic AI — Day 1
-## Local setup and hands-on programs
+# 🧠 Agent Core: Building an Autonomous AI Agent From Scratch
 
-**SoDak EduTech** · Agent Foundations & Building an Agent from Scratch
+[![Python](https://img.shields.io/badge/Python-3.10%2B-blue.svg)](https://www.python.org/)
+[![Architecture](https://img.shields.io/badge/Architecture-From%20Scratch-purple.svg)]()
+[![LLM](https://img.shields.io/badge/LLM-Gemini%20%2F%20OpenAI%20API-orange.svg)](https://ai.google.dev/)
+[![Status](https://img.shields.io/badge/Status-Complete-brightgreen.svg)]()
 
-Everything runs on your own machine. No Colab, no cloud notebook.
-
-**This course costs nothing to run.** The default provider is Google's Gemini
-free tier — no credit card, no billing account, no trial that expires. The only
-third-party package is `openai`, and that package is not tied to OpenAI: point
-it at a different base URL and it talks to any provider with an OpenAI-compatible
-endpoint. Everything else is the Python standard library.
+> **Day 1 — Agentic AI Track**  
+> Understanding foundational AI agent architecture by building the core loop, tool schemas, memory, self-healing reflection, and evaluation harnesses from first principles without high-level black-box frameworks.
 
 ---
 
-# Part A — Setting up your environment
+## 📌 The Problem (What the Mentors Gave Me)
 
-Do this **once**, before Day 1. Budget 30 minutes. If you get stuck, jump to
-[Troubleshooting](#troubleshooting) at the end — the five most common failures
-are listed there with fixes.
+High-level agent frameworks (like LangChain, AutoGen, or CrewAI) often obscure what actually happens inside an LLM agent:
+- How does an LLM decide when to call a tool versus responding with plain text?
+- How are JSON schemas extracted from native Python function signatures and type annotations?
+- What prevents an agent from entering infinite retry loops or burning quota when a tool fails?
+- How do stateful conversations, working memory, and session threads persist?
+
+The challenge was to **demystify the entire agent lifecycle** by constructing `agentcore` from pure Python and low-level API calls—implementing the ReAct (Reason + Act) loop, tool registries, execution engines, circuit breakers, and LLM-as-a-judge evaluators from scratch.
 
 ---
 
-## Step 1 — Check your Python version
+## 💡 My Solution & Architecture (What I Built)
 
-You need **Python 3.10 or newer**. Open a terminal and run:
+I built **`agentcore`**, a lightweight, modular, and transparent agent runtime that exposes every step of the agent execution lifecycle:
 
-```bash
-python --version
+```mermaid
+flowchart TD
+    UserQuery["User Input / Prompt"] --> AgentLoop["Agent Loop (agentcore/agent.py)"]
+    AgentLoop --> LLMCall["LLM Inference (OpenAI / Gemini Client)"]
+    LLMCall --> CheckTool{"Tool Call Requested?"}
+    
+    CheckTool -- "No" --> FinalResponse["Final Answer to User"]
+    CheckTool -- "Yes" --> CircuitBreaker{"Circuit Breaker Check"}
+    
+    CircuitBreaker -- "Limit Exceeded" --> SafeExit["Halt Execution (Prevent Infinite Loops)"]
+    CircuitBreaker -- "OK" --> ToolDispatch["Tool Dispatcher (agentcore/tools.py)"]
+    
+    ToolDispatch --> ExecPython["Execute Native Python Function"]
+    ExecPython --> HandleError{"Execution Success?"}
+    
+    HandleError -- "Error" --> SelfHealing["Self-Healing Reflection: Inject Error Prompt"]
+    SelfHealing --> AgentLoop
+    HandleError -- "Success" --> AppendMem["Append Tool Result to Working Memory"]
+    AppendMem --> AgentLoop
 ```
 
-On macOS and most Linux systems, use `python3` instead of `python`:
+---
 
-```bash
-python3 --version
-```
+## 🛠️ What I Used (Tech Stack)
 
-**If the command is not found, or the version is below 3.10:**
-
-| System | What to do |
-|---|---|
-| **Windows** | Download from python.org. **Tick "Add python.exe to PATH"** on the first installer screen — this is the single most common setup failure. |
-| **macOS** | `brew install python@3.12` — or download from python.org. |
-| **Ubuntu / Debian** | `sudo apt update && sudo apt install python3.12 python3.12-venv` |
-
-> **Windows note:** throughout this guide, wherever you see `python3`, use
-> `python` instead. Wherever you see `pip3`, use `pip`.
+- **Core Language**: Python 3.10+ (Standard Library: `ast`, `inspect`, `json`, `sqlite3`, `typing`)
+- **LLM Connectivity**: `openai` client (targeted at Google Gemini OpenAI-compatible endpoints or NVIDIA NIM)
+- **Evaluation Framework**: `deepeval` / custom LLM-as-a-Judge evaluators
+- **Environment Management**: `python-dotenv`
 
 ---
 
-## Step 2 — Get the project folder
+## ✨ Features & What I Built
 
-Put the `sodak-day1` folder somewhere you can find it — Desktop or Documents is
-fine. Avoid paths with spaces or special characters if you can.
+### 1. Zero-Framework Tool Registry (`agentcore/tools.py`)
+- Automatically parses Python function signatures, docstrings, and type hints into strict **OpenAI-compatible JSON Tool Schemas**.
+- Handles argument validation, type coercion, and execution safety.
 
-Open a terminal **inside that folder**:
+### 2. Autonomous ReAct Execution Loop (`agentcore/agent.py`)
+- Dispatches tool calls, captures return payloads, injects tool outputs into the conversation scratchpad, and resumes the model until a terminal answer is reached.
 
-- **Windows:** open the folder in File Explorer, click the address bar, type `cmd`, press Enter
-- **macOS:** right-click the folder → Services → New Terminal at Folder
-- **Linux:** right-click inside the folder → Open in Terminal
+### 3. Self-Healing Error Recovery (`labs/lab4_self_healing.py`)
+- When a tool fails (e.g., invalid parameters, database missing key), the agent does not crash. It feeds the raw traceback back to the LLM, prompting it to correct its parameters and retry.
 
-Confirm you are in the right place:
+### 4. Circuit Breaker Pattern (`exercises/ex3_circuit_breaker.py`)
+- Enforces strict execution safety guards (maximum iteration limits, duplicate call detection, and token budget thresholds) to prevent runaway costs and infinite loops.
 
-```bash
-# Windows
-dir
+### 5. Memory & Session Management (`agentcore/memory.py`, `labs/lab5_memory.py`)
+- Working memory for immediate tool scratchpads.
+- Thread-isolated session memory for multi-turn conversations.
 
-# macOS / Linux
-ls
-```
-
-You should see `agentcore`, `labs`, `exercises`, `requirements.txt`, `setup_check.py`.
+### 6. LLM-as-a-Judge Evaluation (`exercises/ex4_evaluator_own_task.py`)
+- Automated grading harness that measures agent response relevancy, tool choice correctness, and factual faithfulness against ground-truth benchmarks.
 
 ---
 
-## Step 3 — Create a virtual environment
+## 📂 Project Structure
 
-A virtual environment is a private box of packages for one project. Without it,
-installing something for this course can break a different project on your
-machine — and Linux systems will simply refuse the install.
+```text
+sodak-day1/
+├── agentcore/                   # Core agent runtime built from scratch
+│   ├── __init__.py
+│   ├── agent.py                 # The autonomous ReAct execution loop
+│   ├── config.py                # Model and environment configurations
+│   ├── demo_tools.py            # Sample calculators and lookup tools
+│   ├── memory.py                # Working memory and context window management
+│   ├── patterns.py              # Reflection, routing, and planning patterns
+│   ├── tools.py                 # JSON schema generator & tool dispatcher
+│   └── tracing.py               # Step-by-step execution logger
+├── labs/                        # Hands-on progressive labs
+│   ├── lab1_first_call.py       # Direct LLM invocation & response handling
+│   ├── lab2_tools.py            # Tool calling & JSON schema validation
+│   ├── lab3_agent.py            # Autonomous ReAct agent implementation
+│   ├── lab4_self_healing.py     # Error reflection & recovery loop
+│   ├── lab5_memory.py           # Conversational memory persistence
+│   └── lab6_patterns.py         # Advanced agent architectures
+├── exercises/                   # Applied engineering exercises
+│   ├── ex1_side_effect_tool.py  # Tools that modify persistent state
+│   ├── ex2_session_memory.py    # Multi-session thread isolation
+│   ├── ex3_circuit_breaker.py   # Guardrails against infinite tool loops
+│   └── ex4_evaluator_own_task.py# LLM-as-a-judge evaluation harness
+├── requirements.txt
+├── setup_check.py               # Diagnostic script for environment verification
+└── README.md
+```
 
+---
+
+## 🚀 How to Run & Test
+
+### 1. Setup Environment
 ```bash
-# Windows
 python -m venv .venv
-
-# macOS / Linux
-python3 -m venv .venv
-```
-
-This creates a `.venv` folder. It takes a few seconds. You will not need to edit
-anything inside it.
-
----
-
-## Step 4 — Activate it
-
-**This is the step people forget.** You must activate the environment **every
-time you open a new terminal**.
-
-| System | Command |
-|---|---|
-| **Windows — Command Prompt** | `.venv\Scripts\activate` |
-| **Windows — PowerShell** | `.venv\Scripts\Activate.ps1` |
-| **macOS / Linux** | `source .venv/bin/activate` |
-
-You will know it worked because your prompt gains a `(.venv)` prefix:
-
-```
-(.venv) C:\Users\priya\sodak-day1>
-```
-
-**If PowerShell refuses with a "running scripts is disabled" error**, run this
-once, then activate again:
-
-```powershell
-Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned
-```
-
-**To leave the environment later:** type `deactivate`.
-
----
-
-## Step 5 — Install the dependency
-
-With `(.venv)` showing in your prompt:
-
-```bash
+.venv\Scripts\activate       # On Linux/macOS: source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-That installs `openai` and its dependencies. It takes under a minute.
-
-> **Behind a college proxy?** If the install hangs or fails with a connection
-> error, ask your lab administrator for the proxy address and use:
-> `pip install --proxy http://PROXY:PORT -r requirements.txt`
-
----
-
-## Step 6 — Get a free API key
-
-We use **Google Gemini's free tier**. It needs no credit card and no billing
-account, and it does not expire.
-
-1. Go to **https://aistudio.google.com/apikey**
-2. Sign in with any Google account
-3. Click **Create API key** — accept the default project if asked
-4. Copy the key. It starts with `AIza`
-
-Now put it in the project:
-
+### 2. Configure API Key
+Create a `.env` file in the root folder:
 ```bash
-# Windows
-copy .env.example .env
-
-# macOS / Linux
-cp .env.example .env
+GEMINI_API_KEY=your_gemini_api_key_here
 ```
 
-Open `.env` in any text editor and replace the placeholder:
-
-```
-PROVIDER=gemini
-GEMINI_API_KEY=AIza...your-real-key-here
-```
-
-Save the file.
-
-### Two things to know about the free tier
-
-**Rate limits, not spend limits.** On the free tier, Gemini models allow roughly
-**15–30 requests per minute** with daily quotas per model. One agent run can make several
-calls, so runs may occasionally hit a rate limit. The code handles this — it retries with
-backoff and prints `[rate limited - waiting 5s]`. That message is normal, not an error.
-
-**Your prompts may be used to improve Google's models.** That is the trade for a
-free tier. The sample data in this project is invented, so nothing sensitive is
-at risk — but **do not put real student records, real roll numbers, or anyone's
-personal details into these labs.**
-
-### If you prefer a different provider
-
-Change one line in `.env`. Nothing in `agentcore/` needs editing.
-
-| `PROVIDER=` | Cost | Key from | Notes |
-|---|---|---|---|
-| `gemini` | **Free** | aistudio.google.com/apikey | Default. Best tool calling of the free options. |
-| `groq` | **Free** | console.groq.com/keys | Very fast. Open-weight models. Check current model names. |
-| `ollama` | **Free, offline** | ollama.com/download | No key, no internet, no limits. Needs ~16GB RAM. Weaker tool calling. |
-| `openai` | **Paid** | platform.openai.com/api-keys | No general free tier. Most reliable, but every call is billed. |
-
-**Ollama is the fallback if your lab has no internet.** Install it, run
-`ollama pull llama3.1`, set `PROVIDER=ollama`, and no key is needed at all.
-Expect the agent to need more retries — smaller models are less precise about
-tool arguments, which is itself a useful thing for students to observe.
-
----
-
-## Step 7 — Verify everything
-
+### 3. Run Diagnostic Check
 ```bash
 python setup_check.py
 ```
 
-This runs six checks and stops at the first failure, telling you what to fix. The
-last check makes one real API call — free on the default provider. Expected output:
-
-```
-SoDak EduTech - Agentic AI Day 1 - environment check
-============================================================
-  [ok] Python 3.12.3
-  [ok] running inside a virtual environment
-  [ok] openai package 1.51.0
-  [ok] .env file exists
-  [ok] provider: Google Gemini (free tier)
-  [ok] key loaded (AIzaSy...4f2a)
-         Google Gemini (free tier) | main=gemini-3.5-flash-lite |
-         cheap=gemini-3.1-flash-lite | FREE tier
-
-  making one live API call (free)...
-  [ok] model responded: 'SETUP OK'
-         tokens used: 24
-
-============================================================
-  All checks passed. You are ready.
-```
-
-**Do not proceed until every line reads `[ok]`.**
-
----
-
-## Coming back tomorrow
-
-You only create the environment once. To resume work:
-
+### 4. Run the Labs & Exercises
 ```bash
-cd sodak-day1
-.venv\Scripts\activate        # Windows
-source .venv/bin/activate     # macOS / Linux
-python labs/lab3_agent.py
+# Run the autonomous ReAct agent
+python -m labs.lab3_agent
+
+# Run self-healing error recovery
+python -m labs.lab4_self_healing
+
+# Run circuit breaker guardrails
+python -m exercises.ex3_circuit_breaker
+
+# Run LLM-as-a-judge evaluation
+python -m exercises.ex4_evaluator_own_task
 ```
 
-That is the whole routine: navigate, activate, run.
-
----
 ---
 
-# Part B — The hands-on programs
-
-Run them **in order**. Each builds on the one before it, and each prints an
-explanation of what you just saw.
-
-Run every command from the **project root** (the folder containing `README.md`),
-not from inside `labs/`.
-
-| # | Command | Time | What you build |
-|---|---|---|---|
-| 1 | `python labs/lab1_first_call.py` | 15 min | Your first model call. Roles, tokens, statelessness. |
-| 2 | `python labs/lab2_tools.py` | 25 min | Tool schemas, dispatch, the four failure modes. |
-| 3 | `python labs/lab3_agent.py` | 30 min | A complete agent loop with three tools. |
-| 4 | `python labs/lab4_self_healing.py` | 25 min | The agent reads its own traceback and recovers. |
-| 5 | `python labs/lab5_memory.py` | 25 min | Session memory and thread isolation. |
-| 6 | `python labs/lab6_patterns.py` | 40 min | Evaluator–Optimizer and Orchestrator–Worker. |
-
----
-
-## Lab 1 — Your first model call
-
-```bash
-python labs/lab1_first_call.py
-```
-
-Makes three calls and shows you the token counts side by side. The second half
-proves the model has **no memory**: the same follow-up question is asked with and
-without history attached, and only one of them can answer it.
-
-**Look for:** the prompt-token difference between the two calls. That gap is why
-long conversations cost more.
-
----
-
-## Lab 2 — Tools
-
-```bash
-python labs/lab2_tools.py
-```
-
-Three parts. The first prints a JSON schema that **nobody typed** — it was
-generated from the function's type hints and docstring. The second runs all four
-dispatch outcomes (success, tool raises, wrong arguments, unknown tool). The
-third shows what the model actually sends back when it wants a tool.
-
-**Look for:** in part 3, the `arguments` field is a **string**, not a dictionary.
-Forgetting `json.loads` on it is the classic Day 1 bug.
-
----
-
-## Lab 3 — Your first agent
-
-```bash
-python labs/lab3_agent.py
-```
-
-Three questions of increasing complexity, each printing the answer followed by a
-full run trace.
-
-**Look for three things in the traces:**
-
-1. **How many model calls happened.** It is not a fixed number — the loop ends
-   when the model stops asking for tools.
-2. **Did it use `list_students_below_attendance`,** or three separate
-   `get_student` calls? If the latter, the tool *description* is the bug.
-3. **Did it invent a comparison tool?** It should not. The model can compare
-   three numbers itself. Never build a tool for something the model already does.
-
----
-
-## Lab 4 — Self-healing
-
-```bash
-python labs/lab4_self_healing.py
-```
-
-**This is the highlight of Day 1.**
-
-Part 1 shows the naive case: the exception escapes and the run dies. Part 2 sends
-the same bad input through the real agent, where dispatch converts the failure
-into a structured observation.
-
-**Look for:** in the part 2 trace, a failed tool step followed by a **corrected**
-call with the right roll number. Nobody wrote that correction. The model read its
-own error and fixed its own mistake.
-
-Then open `agentcore/tools.py` and find the three details that make it work: the
-error names the valid options, the traceback is truncated to 800 characters, and
-the circuit breaker stops the tool after three consecutive failures.
-
----
-
-## Lab 5 — Memory
-
-```bash
-python labs/lab5_memory.py
-```
-
-Two threads. Thread A asks a follow-up using the word "her" and resolves it
-correctly. Thread B asks the identical question and cannot, because it has its own
-empty history.
-
-**Look for:** the same `Agent` object serves both threads. It holds no state at
-all — history is passed in and returned out. That is what lets one agent serve
-hundreds of users at once.
-
-The last section demonstrates pair-safe trimming: the first message after
-`system` is never a bare `tool`, because an orphaned tool result is rejected by
-the API.
-
----
-
-## Lab 6 — Design patterns
-
-```bash
-python labs/lab6_patterns.py
-```
-
-The most expensive lab — roughly 10–14 model calls. Part 1 runs an
-Evaluator–Optimizer loop against four explicit criteria. Part 2 runs an
-Orchestrator–Worker system that invents its own sub-tasks.
-
-**Look for:** in part 2, the printed worker roles. Run it again with a different
-goal and **the roles change** — those strings are not in the source code. That is
-what separates orchestrator–worker from parallelisation.
-
-Two experiments are printed at the end of part 1. Do both — especially the vague
-criteria one, which demonstrates the pattern's most common production failure.
-
----
----
-
-# Part C — Exercises
-
-The labs are read-and-run. These are write-your-own. Each file has a
-`YOUR CODE` block and a checkpoint list.
-
-| # | Command | Time | Task |
-|---|---|---|---|
-| 1 | `python exercises/ex1_side_effect_tool.py` | 20 min | Write a tool with a side effect and a docstring that controls when it fires. |
-| 2 | `python exercises/ex2_session_memory.py` | 20 min | Implement the `chat()` helper with load / run / save. |
-| 3 | `python exercises/ex3_circuit_breaker.py` | 15 min | Write a tool that always fails; prove the breaker works. |
-| 4 | `python exercises/ex4_evaluator_own_task.py` | 25 min | Evaluator–Optimizer on a task from your own life. |
-
-Exercises 2, 3 and 4 will raise `NotImplementedError` until you complete them.
-That is intentional.
-
-**Exercise 1 is the one to spend time on.** The Python is trivial; the docstring
-is the actual work. It must make the agent send a notice for *"Inform Priya about
-her fee balance"* but **not** for *"What is Priya's fee balance?"* — using the same
-code, changing only the words the model reads.
-
----
----
-
-# Project structure
-
-```
-sodak-day1/
-├─ README.md                  this file
-├─ requirements.txt           one dependency: openai
-├─ .env.example               copy to .env and add your key
-├─ .gitignore                 keeps .env and .venv out of git
-├─ setup_check.py             run this first
-│
-├─ agentcore/                 the framework you are building
-│  ├─ config.py               env loading, client, cost constants
-│  ├─ tools.py                @tool decorator + ToolRegistry + dispatch
-│  ├─ tracing.py              Step, RunTrace, cost estimation
-│  ├─ memory.py               ConversationStore, output capping
-│  ├─ agent.py                the execution loop
-│  ├─ patterns.py             Evaluator-Optimizer, Orchestrator-Worker
-│  └─ demo_tools.py           three campus tools to experiment with
-│
-├─ labs/                      run these in order
-└─ exercises/                 write these yourself
-```
-
-Read the modules in this order — each is heavily commented and roughly 150 lines:
-
-`tools.py` → `tracing.py` → `memory.py` → `agent.py` → `patterns.py`
-
----
-
-# Troubleshooting
-
-| Symptom | Cause | Fix |
-|---|---|---|
-| `'python' is not recognized` | Python not on PATH (Windows) | Reinstall, **tick "Add python.exe to PATH"**. Or use the full path. |
-| `No module named 'openai'` | Environment not activated, or install skipped | Activate (`.venv\Scripts\activate`), then `pip install -r requirements.txt` |
-| `No module named 'agentcore'` | Running from inside `labs/` | `cd` back to the project root and run `python labs/lab1_first_call.py` |
-| `GEMINI_API_KEY is missing` | No `.env`, or placeholder still in it | Copy `.env.example` to `.env` and paste your free key |
-| `PROVIDER='x' is not recognised` | Typo in `.env` | Use one of: `gemini`, `groq`, `ollama`, `openai` |
-| `running scripts is disabled` | PowerShell execution policy | `Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned` |
-| `externally-managed-environment` | Installing outside a venv on Linux | Create and activate `.venv` first — do not use `--break-system-packages` |
-| `401` / `API key not valid` | Key wrong, or has a stray space | Regenerate at aistudio.google.com/apikey; check for quotes around it |
-| `[rate limited - waiting 5s]` | Free-tier requests-per-minute cap | **Normal.** It retries automatically with exponential backoff. |
-| `429` after all retries | Per-minute burst limit reached | Wait 60s, or increase `MAX_RETRIES` and `RETRY_BASE_DELAY` in `.env` |
-| `APIConnectionError` | No internet, or a proxy is blocking | Check connectivity; ask the lab admin for proxy settings |
-| `404` / model not found | Model renamed or retired | Set `MODEL_MAIN=` in `.env` to a current active model name |
-| `Connection refused` on Ollama | Ollama not running | Start the Ollama app, then `ollama pull llama3.1` |
-| `UnicodeEncodeError: 'charmap'` | Windows console default encoding | Configured in `_path.py` via `sys.stdout.reconfigure(encoding='utf-8')` |
-| `tool message must follow tool_calls` | Append order wrong | The assistant message goes in **before** any tool messages |
-| `not JSON serializable` | Tool returned a date or custom object | `json.dumps(..., default=str)` — see `memory.cap_tool_output` |
-| Run never ends | No iteration cap, or a tool always failing | Check `max_iterations`; look at the trace for a repeating tool |
-
----
-
-# Cost and rate limits
-
-**On the default provider this course costs nothing.** No card, no credits, no
-expiry. The trace still prints a cost line so you learn to read it — it will say
-`cost: free tier` until you switch to a paid provider.
-
-What you manage instead is **rate limits**. Four habits:
-
-1. **Keep `MODEL_CHEAP` on the lighter model.** Evaluators, planners and routers
-   do easy work, and the lighter model usually has a higher request limit.
-2. **Never remove `max_iterations`.** A failing tool with no cap will burn your
-   daily request quota in about ninety seconds.
-3. **Stagger the class.** If thirty students launch Lab 6 simultaneously, some
-   will hit limits. Start in two halves a minute apart.
-4. **Read the token counts anyway.** They are the habit that matters when a real
-   project moves to a paid provider — where the same run costs real money.
-
-If you later move to a paid provider, set `PRICE_PER_1K_INPUT` and
-`PRICE_PER_1K_OUTPUT` in `.env` and the trace will compute rupee costs for you.
-
----
-
-# End of Day 1 — what to submit
-
-- Your completed `exercises/` folder, pushed to your own GitHub repository
-- One trace from a successful multi-tool run (Lab 3)
-- One trace showing self-healing recovery (Lab 4)
-- Your largest run by token count, and one thing you would change to reduce it
-
-**Tomorrow:** the OpenAI Agents SDK. Every feature in it is something in
-`agentcore/` that you built by hand today. Keep this folder — you will map them
-one to one.
-
----
-
-*SoDak EduTech · Agentic AI Track · sodakedutech.in*
+## 📜 License
+MIT License
